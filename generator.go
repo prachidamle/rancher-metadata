@@ -154,6 +154,10 @@ func addDefaultToAnswers(answers Answers, versionedData *Interim) map[string]int
 		defaultAnswers["self"] = self
 	}
 
+	rancherInstallInfo := make(map[string]interface{})
+	rancherInstallInfo["uuid"] = INSTALL_UUID
+	defaultAnswers["install"] = rancherInstallInfo
+
 	answers[DEFAULT_KEY] = defaultAnswers
 	return defaultAnswers
 }
