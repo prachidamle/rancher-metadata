@@ -21,6 +21,7 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/golang/gddo/httputil"
 	"github.com/gorilla/mux"
+	rancher "github.com/rancher/go-rancher/v2"
 	yaml "gopkg.in/yaml.v2"
 	_ "net/http/pprof"
 )
@@ -32,6 +33,7 @@ const (
 
 	// The top-level key in the JSON for the default (not client-specific answers)
 	DEFAULT_KEY = "default"
+	uuidSetting = "install.uuid"
 )
 
 var (
@@ -40,6 +42,7 @@ var (
 	// For example, given: { things: [ {name: 'asdf', stuff: 42}, {name: 'zxcv', stuff: 43} ] }
 	// Both ../things/0/stuff and ../things/asdf/stuff will return 42 because 'asdf' matched the 'anme' field of one of the 'things'.
 	MAGIC_ARRAY_KEYS = []string{"name", "uuid"}
+	INSTALL_UUID     string
 )
 
 // ServerConfig specifies the configuration for the metadata server
@@ -157,6 +160,13 @@ func appMain(ctx *cli.Context) error {
 			logrus.Fatal("Failed to subscribe", err)
 		}
 	}
+
+	uuid, err := loadRancherUUID()
+	if err != nil {
+		logrus.Fatalf("Failed to find rancher install.uuid setting, got error: %v", err)
+	}
+
+	INSTALL_UUID = uuid
 
 	go func() {
 		logrus.Info(http.ListenAndServe(":6060", nil))
@@ -578,4 +588,32 @@ func (sc *ServerConfig) requestIp(req *http.Request) string {
 
 	clientIp, _, _ := net.SplitHostPort(req.RemoteAddr)
 	return clientIp
+}
+
+func loadRancherUUID() (string, error) {
+	client, err := rancher.NewRancherClient(&rancher.ClientOpts{
+		Url:       os.Getenv("CATTLE_URL"),
+		AccessKey: os.Getenv("CATTLE_ACCESS_KEY"),
+		SecretKey: os.Getenv("CATTLE_SECRET_KEY"),
+	})
+
+	if err != nil {
+		logrus.Warnf("Error creating rancher client: %v", err)
+		return "", err
+	}
+
+	var setting *rancher.Setting
+	setting, err = client.Setting.ById(uuidSetting)
+	if err != nil {
+		logrus.Warnf("Error retrieving rancher setting: %v", err)
+		return "", err
+	} else {
+		logrus.Infof("rancher setting: %v", setting)
+	}
+
+	if setting != nil {
+		return setting.Value, nil
+	}
+
+	return "", nil
 }
